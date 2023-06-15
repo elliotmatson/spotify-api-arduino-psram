@@ -26,7 +26,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA
 // NOTE: Do not use this option on live-streams, it will reveal your
 // private tokens!
 
-#define SPOTIFY_DEBUG 1
+//#define SPOTIFY_DEBUG 1
 
 // Comment out if you want to disable any serial output from this library (also comment out DEBUG and PRINT_JSON_PARSE)
 #define SPOTIFY_SERIAL_OUTPUT 1
@@ -51,11 +51,11 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA
 #define SPOTIFY_HOST "api.spotify.com"
 #define SPOTIFY_ACCOUNTS_HOST "accounts.spotify.com"
 
-// Fingerprint for "*.spotify.com", correct as of May 7th, 2022
-#define SPOTIFY_FINGERPRINT "4A 44 71 F7 6A 8D D4 BD 54 E9 0E 3D E8 6C A6 E0 00 27 BA D5"
+// Fingerprint for "*.spotify.com", correct as of March 31, 2023
+#define SPOTIFY_FINGERPRINT "9F 3F 7B C6 26 4C 97 06 A2 D4 D7 B2 35 45 D9 AA 8D BD CD 4D"
 
-// Fingerprint for "*.scdn.co", correct as of May 7th, 2022
-#define SPOTIFY_IMAGE_SERVER_FINGERPRINT "08 9F D9 6B 46 93 45 43 29 07 BE AD 76 CF 6B 44 3B AE 95 F6"
+// Fingerprint for "*.scdn.co", correct as of March 31, 2023
+#define SPOTIFY_IMAGE_SERVER_FINGERPRINT "8B 24 D0 B7 12 AC DB 03 75 09 45 95 24 FF BE D8 35 E6 EB DF"
 
 #define SPOTIFY_TIMEOUT 2000
 
@@ -67,7 +67,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA
 #define SPOTIFY_DEVICE_NAME_CHAR_LENGTH 80
 #define SPOTIFY_DEVICE_TYPE_CHAR_LENGTH 30
 
-#define SPOTIFY_CURRENTLY_PLAYING_ENDPOINT "/v1/me/player/currently-playing"
+#define SPOTIFY_CURRENTLY_PLAYING_ENDPOINT "/v1/me/player/currently-playing?additional_types=episode"
 
 #define SPOTIFY_PLAYER_ENDPOINT "/v1/me/player"
 #define SPOTIFY_DEVICES_ENDPOINT "/v1/me/player/devices"
@@ -114,6 +114,13 @@ enum RepeatOptions
   repeat_track,
   repeat_context,
   repeat_off
+};
+
+enum SpotifyPlayingType
+{
+  track,
+  episode,
+  other
 };
 
 struct SpotifyImage
@@ -175,6 +182,8 @@ struct CurrentlyPlaying
   bool isPlaying;
   long progressMs;
   long durationMs;
+  const char *contextUri;
+  SpotifyPlayingType currentlyPlayingType;
 };
 
 class SpotifyArduino
