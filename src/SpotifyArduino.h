@@ -93,20 +93,24 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA
 #define SPOTIFY_ACCESS_TOKEN_LENGTH 309
 
 #ifdef SPOTIFY_JSON_PSRAM
-struct SpiRamAllocator {
-  void* allocate(size_t size) {
+struct SpiRamAllocator : ArduinoJson::Allocator {
+  void* allocate(size_t size) override {
     return heap_caps_malloc(size, MALLOC_CAP_SPIRAM);
   }
 
-  void deallocate(void* pointer) {
-    heap_caps_free(pointer);
+  void deallocate(void* ptr) override {
+    heap_caps_free(ptr);
   }
 
-  void* reallocate(void* ptr, size_t new_size) {
+  void* reallocate(void* ptr, size_t new_size) override {
     return heap_caps_realloc(ptr, new_size, MALLOC_CAP_SPIRAM);
   }
 };
-using SpiRamJsonDocument = BasicJsonDocument<SpiRamAllocator>;
+
+inline ArduinoJson::Allocator* spiRamAllocator() {
+  static SpiRamAllocator allocator;
+  return &allocator;
+}
 #endif
 
 enum RepeatOptions
