@@ -28,7 +28,7 @@ SpotifyArduino::SpotifyArduino(WiFiClient &client)
 SpotifyArduino::SpotifyArduino(WiFiClient &client, char *bearerToken)
 {
     this->client = &client;
-    sprintf(this->_bearerToken, "Bearer %s", bearerToken);
+    setBearerToken(bearerToken);
 }
 
 SpotifyArduino::SpotifyArduino(WiFiClient &client, const char *clientId, const char *clientSecret, const char *refreshToken)
@@ -56,9 +56,10 @@ int SpotifyArduino::makePutRequest(const char *command, const char *authorizatio
 
 int SpotifyArduino::makePostRequest(const char *command, const char *authorization, const char *body, const char *contentType, const char *host)
 {
-    ESP_LOGI(__func__, "command: %s, body: %s, contentType: %s, host: %s", command, body, contentType, host);
+    // Never the body: for the token endpoint it holds the client secret and
+    // the refresh token or authorization code.
+    ESP_LOGD(__func__, "POST %s%s (%s)", host, command, contentType);
     https.begin(*client, host, 443, command, true);
-    ESP_LOGI(__func__, "https.begin() done");
     //https.useHTTP10(true);
     https.addHeader("Host", host);
     https.addHeader("Accept", "application/json");
@@ -68,7 +69,6 @@ int SpotifyArduino::makePostRequest(const char *command, const char *authorizati
         https.addHeader("Authorization", authorization);
     }
     https.addHeader("Cache-Control", "no-cache");
-    ESP_LOGI(__func__, "https.addHeader() done");
     return https.POST(body);
 }
 
@@ -94,24 +94,58 @@ void SpotifyArduino::setRefreshToken(const char *refreshToken)
     int newRefreshTokenLen = strlen(refreshToken);
     if (_refreshToken == NULL || strlen(_refreshToken) < newRefreshTokenLen)
     {
-        delete _refreshToken;
+        delete[] _refreshToken;
         _refreshToken = new char[newRefreshTokenLen + 1]();
     }
 
     strncpy(_refreshToken, refreshToken, newRefreshTokenLen + 1);
 }
 
+void SpotifyArduino::setBearerToken(const char *accessToken)
+{
+    if (accessToken == nullptr)
+    {
+        _bearerToken[0] = '\0';
+        return;
+    }
+    int written = snprintf(_bearerToken, sizeof(_bearerToken), "Bearer %s", accessToken);
+    if (written < 0 || (size_t)written >= sizeof(_bearerToken))
+    {
+        // A truncated token would only fail later with a confusing 401.
+        ESP_LOGE(__func__, "Access token is %u characters, longer than SPOTIFY_ACCESS_TOKEN_LENGTH", (unsigned)strlen(accessToken));
+        _bearerToken[0] = '\0';
+    }
+}
+
+std::string SpotifyArduino::formatBody(const char *format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    va_list copy;
+    va_copy(copy, args);
+    int length = vsnprintf(nullptr, 0, format, copy);
+    va_end(copy);
+    std::string body(length > 0 ? length : 0, '\0');
+    if (length > 0)
+    {
+        vsnprintf(&body[0], length + 1, format, args);
+    }
+    va_end(args);
+    return body;
+}
+
 bool SpotifyArduino::refreshAccessToken()
 {
-    char body[300];
-    sprintf(body, refreshAccessTokensBody, _refreshToken, _clientId, _clientSecret);
+    // Sized to fit rather than a fixed 300-byte stack buffer, which a longer
+    // refresh token plus the credentials would overflow.
+    std::string body = formatBody(refreshAccessTokensBody, _refreshToken, _clientId, _clientSecret);
 
 #ifdef SPOTIFY_DEBUG
-    ESP_LOGI(__func__, "%s", body);
+    ESP_LOGI(__func__, "%s", body.c_str());
     printStack();
 #endif
 
-    int statusCode = makePostRequest(SPOTIFY_TOKEN_ENDPOINT, NULL, body, "application/x-www-form-urlencoded", SPOTIFY_ACCOUNTS_HOST);
+    int statusCode = makePostRequest(SPOTIFY_TOKEN_ENDPOINT, NULL, body.c_str(), "application/x-www-form-urlencoded", SPOTIFY_ACCOUNTS_HOST);
     unsigned long now = millis();
 
 #ifdef SPOTIFY_DEBUG
@@ -151,7 +185,7 @@ bool SpotifyArduino::refreshAccessToken()
             const char *accessToken = doc["access_token"].as<const char *>();
             if (accessToken != NULL && (SPOTIFY_ACCESS_TOKEN_LENGTH >= strlen(accessToken)))
             {
-                sprintf(this->_bearerToken, "Bearer %s", accessToken);
+                setBearerToken(accessToken);
                 int tokenTtl = doc["expires_in"];             // Usually 3600 (1 hour)
                 tokenTimeToLiveMs = (tokenTtl * 1000) - 2000; // The 2000 is just to force the token expiry to check if its very close
                 timeTokenRefreshed = now;
@@ -198,14 +232,16 @@ bool SpotifyArduino::checkAndRefreshAccessToken()
 const char *SpotifyArduino::requestAccessTokens(const char *code, const char *redirectUrl)
 {
 
-    char body[500];
-    sprintf(body, requestAccessTokensBody, code, redirectUrl, _clientId, _clientSecret);
+    // Sized to fit rather than a fixed 500-byte stack buffer. Authorization
+    // codes run to 300 characters or so, and the HTTPS redirect URI Spotify
+    // has required since 2025 adds 60+ more URL-encoded: enough to overflow it.
+    std::string body = formatBody(requestAccessTokensBody, code, redirectUrl, _clientId, _clientSecret);
 
 #ifdef SPOTIFY_DEBUG
-    ESP_LOGI(__func__, "%s", body);
+    ESP_LOGI(__func__, "%s", body.c_str());
 #endif
 
-    int statusCode = makePostRequest(SPOTIFY_TOKEN_ENDPOINT, NULL, body, "application/x-www-form-urlencoded", SPOTIFY_ACCOUNTS_HOST);
+    int statusCode = makePostRequest(SPOTIFY_TOKEN_ENDPOINT, NULL, body.c_str(), "application/x-www-form-urlencoded", SPOTIFY_ACCOUNTS_HOST);
     unsigned long now = millis();
 
 #ifdef SPOTIFY_DEBUG
@@ -228,7 +264,7 @@ const char *SpotifyArduino::requestAccessTokens(const char *code, const char *re
 #endif
         if (!error)
         {
-            sprintf(this->_bearerToken, "Bearer %s", doc["access_token"].as<const char *>());
+            setBearerToken(doc["access_token"].as<const char *>());
             setRefreshToken(doc["refresh_token"].as<const char *>());
             int tokenTtl = doc["expires_in"];             // Usually 3600 (1 hour)
             tokenTimeToLiveMs = (tokenTtl * 1000) - 2000; // The 2000 is just to force the token expiry to check if its very close
