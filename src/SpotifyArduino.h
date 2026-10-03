@@ -43,6 +43,8 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA
 #include <WiFiClientSecure.h>
 #include <WiFiClient.h>
 #include <HTTPClient.h>
+#include <string>
+#include <cstdarg>
 
 #ifdef SPOTIFY_PRINT_JSON_PARSE
 #include <StreamUtils.h>
@@ -257,6 +259,8 @@ private:
   int getContentLength();
   void closeClient();
   void parseError();
+  void setBearerToken(const char *accessToken);
+  static std::string formatBody(const char *format, ...);
   const char *requestAccessTokensBody =
       R"(grant_type=authorization_code&code=%s&redirect_uri=%s&client_id=%s&client_secret=%s)";
   const char *refreshAccessTokensBody =
